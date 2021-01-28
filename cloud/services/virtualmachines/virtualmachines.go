@@ -26,15 +26,16 @@ import (
 	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
-
 	corev1 "k8s.io/api/core/v1"
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-azure/api/v1alpha3"
 	azure "sigs.k8s.io/cluster-api-provider-azure/cloud"
 	"sigs.k8s.io/cluster-api-provider-azure/cloud/converters"
+	"sigs.k8s.io/cluster-api-provider-azure/cloud/services/availabilitysets"
 	"sigs.k8s.io/cluster-api-provider-azure/cloud/services/networkinterfaces"
 	"sigs.k8s.io/cluster-api-provider-azure/cloud/services/publicips"
 	"sigs.k8s.io/cluster-api-provider-azure/cloud/services/resourceskus"
+	"sigs.k8s.io/cluster-api-provider-azure/util/generators"
 	"sigs.k8s.io/cluster-api-provider-azure/util/tele"
 )
 
@@ -47,6 +48,7 @@ type VMScope interface {
 	GetVMImage() (*infrav1.Image, error)
 	SetAnnotation(string, string)
 	ProviderID() string
+	AvailabilitySet() (string, bool)
 	SetProviderID(string)
 	SetAddresses([]corev1.NodeAddress)
 	SetVMState(infrav1.VMState)
@@ -56,19 +58,21 @@ type VMScope interface {
 type Service struct {
 	Scope VMScope
 	Client
-	interfacesClient networkinterfaces.Client
-	publicIPsClient  publicips.Client
-	resourceSKUCache *resourceskus.Cache
+	interfacesClient       networkinterfaces.Client
+	publicIPsClient        publicips.Client
+	availabilitySetsClient availabilitysets.Client
+	resourceSKUCache       *resourceskus.Cache
 }
 
 // New creates a new service.
 func New(scope VMScope, skuCache *resourceskus.Cache) *Service {
 	return &Service{
-		Scope:            scope,
-		Client:           NewClient(scope),
-		interfacesClient: networkinterfaces.NewClient(scope),
-		publicIPsClient:  publicips.NewClient(scope),
-		resourceSKUCache: skuCache,
+		Scope:                  scope,
+		Client:                 NewClient(scope),
+		interfacesClient:       networkinterfaces.NewClient(scope),
+		publicIPsClient:        publicips.NewClient(scope),
+		availabilitySetsClient: availabilitysets.NewClient(scope),
+		resourceSKUCache:       skuCache,
 	}
 }
 
@@ -126,13 +130,9 @@ func (s *Service) Reconcile(ctx context.Context) error {
 			return errors.Wrapf(err, "failed to get Spot VM options")
 		}
 
-		sshKey, err := base64.StdEncoding.DecodeString(vmSpec.SSHKeyData)
+		osProfile, err := s.generateOSProfile(ctx, vmSpec)
 		if err != nil {
-			return errors.Wrapf(err, "failed to decode ssh public key")
-		}
-		bootstrapData, err := s.Scope.GetBootstrapData(ctx)
-		if err != nil {
-			return errors.Wrap(err, "failed to retrieve bootstrap data")
+			return errors.Wrapf(err, "failed to generate OS Profile")
 		}
 
 		virtualMachine := compute.VirtualMachine{
@@ -151,22 +151,7 @@ func (s *Service) Reconcile(ctx context.Context) error {
 				},
 				StorageProfile:  storageProfile,
 				SecurityProfile: securityProfile,
-				OsProfile: &compute.OSProfile{
-					ComputerName:  to.StringPtr(vmSpec.Name),
-					AdminUsername: to.StringPtr(azure.DefaultUserName),
-					CustomData:    to.StringPtr(bootstrapData),
-					LinuxConfiguration: &compute.LinuxConfiguration{
-						DisablePasswordAuthentication: to.BoolPtr(true),
-						SSH: &compute.SSHConfiguration{
-							PublicKeys: &[]compute.SSHPublicKey{
-								{
-									Path:    to.StringPtr(fmt.Sprintf("/home/%s/.ssh/authorized_keys", azure.DefaultUserName)),
-									KeyData: to.StringPtr(string(sshKey)),
-								},
-							},
-						},
-					},
-				},
+				OsProfile:       osProfile,
 				NetworkProfile: &compute.NetworkProfile{
 					NetworkInterfaces: &nicRefs,
 				},
@@ -181,7 +166,12 @@ func (s *Service) Reconcile(ctx context.Context) error {
 			},
 		}
 
-		if vmSpec.Zone != "" {
+		// Set availability set if no failure domains are available
+		if asName, ok := s.Scope.AvailabilitySet(); ok {
+			asID := to.StringPtr(azure.AvailabilitySetID(s.Scope.SubscriptionID(),
+				s.Scope.ResourceGroup(), asName))
+			virtualMachine.AvailabilitySet = &compute.SubResource{ID: asID}
+		} else if vmSpec.Zone != "" {
 			zones := []string{vmSpec.Zone}
 			virtualMachine.Zones = &zones
 		}
@@ -261,9 +251,11 @@ func (s *Service) generateImagePlan() *compute.Plan {
 	if err != nil {
 		return nil
 	}
-	if image.Marketplace == nil || image.Marketplace.ThirdPartyImage == false {
+
+	if image.Marketplace == nil || !image.Marketplace.ThirdPartyImage {
 		return nil
 	}
+
 	if image.Marketplace.Publisher == "" || image.Marketplace.SKU == "" || image.Marketplace.Offer == "" {
 		return nil
 	}
@@ -397,15 +389,15 @@ func (s *Service) generateStorageProfile(ctx context.Context, vmSpec azure.VMSpe
 		storageProfile.OsDisk.ManagedDisk.DiskEncryptionSet = &compute.DiskEncryptionSetParameters{ID: to.StringPtr(vmSpec.OSDisk.ManagedDisk.DiskEncryptionSet.ID)}
 	}
 
-	dataDisks := []compute.DataDisk{}
-	for _, disk := range vmSpec.DataDisks {
-		dataDisks = append(dataDisks, compute.DataDisk{
+	dataDisks := make([]compute.DataDisk, len(vmSpec.DataDisks))
+	for i, disk := range vmSpec.DataDisks {
+		dataDisks[i] = compute.DataDisk{
 			CreateOption: compute.DiskCreateOptionTypesEmpty,
 			DiskSizeGB:   to.Int32Ptr(disk.DiskSizeGB),
 			Lun:          disk.Lun,
 			Name:         to.StringPtr(azure.GenerateDataDiskName(vmSpec.Name, disk.NameSuffix)),
 			Caching:      compute.CachingTypes(disk.CachingType),
-		})
+		}
 	}
 	storageProfile.DataDisks = &dataDisks
 
@@ -431,6 +423,52 @@ func getResourceNameByID(resourceID string) string {
 	explodedResourceID := strings.Split(resourceID, "/")
 	resourceName := explodedResourceID[len(explodedResourceID)-1]
 	return resourceName
+}
+
+func (s *Service) generateOSProfile(ctx context.Context, vmSpec azure.VMSpec) (*compute.OSProfile, error) {
+	sshKey, err := base64.StdEncoding.DecodeString(vmSpec.SSHKeyData)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to decode ssh public key")
+	}
+	bootstrapData, err := s.Scope.GetBootstrapData(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to retrieve bootstrap data")
+	}
+
+	osProfile := &compute.OSProfile{
+		ComputerName:  to.StringPtr(vmSpec.Name),
+		AdminUsername: to.StringPtr(azure.DefaultUserName),
+		CustomData:    to.StringPtr(bootstrapData),
+	}
+
+	switch vmSpec.OSDisk.OSType {
+	case string(compute.Windows):
+		// Cloudbase-init is used to generate a password.
+		// https://cloudbase-init.readthedocs.io/en/latest/plugins.html#setting-password-main
+		//
+		// We generate a random password here in case of failure
+		// but the password on the VM will NOT be the same as created here.
+		// Access is provided via SSH public key that is set during deployment
+		// Azure also provides a way to reset user passwords in the case of need.
+		osProfile.AdminPassword = to.StringPtr(generators.SudoRandomPassword(123))
+		osProfile.WindowsConfiguration = &compute.WindowsConfiguration{
+			EnableAutomaticUpdates: to.BoolPtr(false),
+		}
+	default:
+		osProfile.LinuxConfiguration = &compute.LinuxConfiguration{
+			DisablePasswordAuthentication: to.BoolPtr(true),
+			SSH: &compute.SSHConfiguration{
+				PublicKeys: &[]compute.SSHPublicKey{
+					{
+						Path:    to.StringPtr(fmt.Sprintf("/home/%s/.ssh/authorized_keys", azure.DefaultUserName)),
+						KeyData: to.StringPtr(string(sshKey)),
+					},
+				},
+			},
+		}
+	}
+
+	return osProfile, nil
 }
 
 func getSecurityProfile(vmSpec azure.VMSpec, sku resourceskus.SKU) (*compute.SecurityProfile, error) {

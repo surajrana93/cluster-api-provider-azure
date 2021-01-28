@@ -244,6 +244,20 @@ func (mr *MockSubnetScopeMockRecorder) Authorizer() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authorizer", reflect.TypeOf((*MockSubnetScope)(nil).Authorizer))
 }
 
+// HashKey mocks base method.
+func (m *MockSubnetScope) HashKey() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HashKey")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// HashKey indicates an expected call of HashKey.
+func (mr *MockSubnetScopeMockRecorder) HashKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HashKey", reflect.TypeOf((*MockSubnetScope)(nil).HashKey))
+}
+
 // ResourceGroup mocks base method.
 func (m *MockSubnetScope) ResourceGroup() string {
 	m.ctrl.T.Helper()
@@ -298,6 +312,20 @@ func (m *MockSubnetScope) AdditionalTags() v1alpha3.Tags {
 func (mr *MockSubnetScopeMockRecorder) AdditionalTags() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdditionalTags", reflect.TypeOf((*MockSubnetScope)(nil).AdditionalTags))
+}
+
+// AvailabilitySetEnabled mocks base method.
+func (m *MockSubnetScope) AvailabilitySetEnabled() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AvailabilitySetEnabled")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// AvailabilitySetEnabled indicates an expected call of AvailabilitySetEnabled.
+func (mr *MockSubnetScopeMockRecorder) AvailabilitySetEnabled() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AvailabilitySetEnabled", reflect.TypeOf((*MockSubnetScope)(nil).AvailabilitySetEnabled))
 }
 
 // Vnet mocks base method.

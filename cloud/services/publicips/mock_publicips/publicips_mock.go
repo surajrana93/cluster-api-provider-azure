@@ -244,6 +244,20 @@ func (mr *MockPublicIPScopeMockRecorder) Authorizer() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authorizer", reflect.TypeOf((*MockPublicIPScope)(nil).Authorizer))
 }
 
+// HashKey mocks base method.
+func (m *MockPublicIPScope) HashKey() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HashKey")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// HashKey indicates an expected call of HashKey.
+func (mr *MockPublicIPScopeMockRecorder) HashKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HashKey", reflect.TypeOf((*MockPublicIPScope)(nil).HashKey))
+}
+
 // ResourceGroup mocks base method.
 func (m *MockPublicIPScope) ResourceGroup() string {
 	m.ctrl.T.Helper()
@@ -298,6 +312,20 @@ func (m *MockPublicIPScope) AdditionalTags() v1alpha3.Tags {
 func (mr *MockPublicIPScopeMockRecorder) AdditionalTags() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdditionalTags", reflect.TypeOf((*MockPublicIPScope)(nil).AdditionalTags))
+}
+
+// AvailabilitySetEnabled mocks base method.
+func (m *MockPublicIPScope) AvailabilitySetEnabled() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AvailabilitySetEnabled")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// AvailabilitySetEnabled indicates an expected call of AvailabilitySetEnabled.
+func (mr *MockPublicIPScopeMockRecorder) AvailabilitySetEnabled() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AvailabilitySetEnabled", reflect.TypeOf((*MockPublicIPScope)(nil).AvailabilitySetEnabled))
 }
 
 // PublicIPSpecs mocks base method.

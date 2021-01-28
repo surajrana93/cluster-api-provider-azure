@@ -51,9 +51,26 @@ import (
 // AzureClusterReconciler reconciles a AzureCluster object
 type AzureClusterReconciler struct {
 	client.Client
-	Log              logr.Logger
-	Recorder         record.EventRecorder
-	ReconcileTimeout time.Duration
+	Log                       logr.Logger
+	Recorder                  record.EventRecorder
+	ReconcileTimeout          time.Duration
+	createAzureClusterService azureClusterServiceCreator
+}
+
+type azureClusterServiceCreator func(clusterScope *scope.ClusterScope) (*azureClusterService, error)
+
+// NewAzureClusterReconciler returns a new AzureClusterReconciler instance
+func NewAzureClusterReconciler(client client.Client, log logr.Logger, recorder record.EventRecorder, reconcileTimeout time.Duration) *AzureClusterReconciler {
+	acr := &AzureClusterReconciler{
+		Client:           client,
+		Log:              log,
+		Recorder:         recorder,
+		ReconcileTimeout: reconcileTimeout,
+	}
+
+	acr.createAzureClusterService = newAzureClusterService
+
+	return acr
 }
 
 // SetupWithManager initializes this controller with a manager.
@@ -225,8 +242,12 @@ func (r *AzureClusterReconciler) reconcileNormal(ctx context.Context, clusterSco
 		}
 	}
 
-	err := newAzureClusterReconciler(clusterScope).Reconcile(ctx)
+	acr, err := r.createAzureClusterService(clusterScope)
 	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "failed to create a new AzureClusterReconciler")
+	}
+
+	if err := acr.Reconcile(ctx); err != nil {
 		wrappedErr := errors.Wrap(err, "failed to reconcile cluster services")
 		r.Recorder.Eventf(azureCluster, corev1.EventTypeWarning, "ClusterReconcilerNormalFailed", wrappedErr.Error())
 		return reconcile.Result{}, wrappedErr
@@ -257,7 +278,12 @@ func (r *AzureClusterReconciler) reconcileDelete(ctx context.Context, clusterSco
 		return reconcile.Result{}, err
 	}
 
-	if err := newAzureClusterReconciler(clusterScope).Delete(ctx); err != nil {
+	acr, err := r.createAzureClusterService(clusterScope)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "failed to create a new AzureClusterReconciler")
+	}
+
+	if err := acr.Delete(ctx); err != nil {
 		wrappedErr := errors.Wrapf(err, "error deleting AzureCluster %s/%s", azureCluster.Namespace, azureCluster.Name)
 		r.Recorder.Eventf(azureCluster, corev1.EventTypeWarning, "ClusterReconcilerDeleteFailed", wrappedErr.Error())
 		conditions.MarkFalse(azureCluster, infrav1.NetworkInfrastructureReadyCondition, clusterv1.DeletionFailedReason, clusterv1.ConditionSeverityWarning, err.Error())

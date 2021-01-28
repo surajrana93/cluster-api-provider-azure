@@ -55,10 +55,11 @@ type (
 	// AzureMachinePoolReconciler reconciles a AzureMachinePool object
 	AzureMachinePoolReconciler struct {
 		client.Client
-		Log              logr.Logger
-		Scheme           *runtime.Scheme
-		Recorder         record.EventRecorder
-		ReconcileTimeout time.Duration
+		Log                           logr.Logger
+		Scheme                        *runtime.Scheme
+		Recorder                      record.EventRecorder
+		ReconcileTimeout              time.Duration
+		createAzureMachinePoolService azureMachinePoolServiceCreator
 	}
 
 	// annotationReaderWriter provides an interface to read and write annotations
@@ -67,6 +68,22 @@ type (
 		SetAnnotations(annotations map[string]string)
 	}
 )
+
+type azureMachinePoolServiceCreator func(machinePoolScope *scope.MachinePoolScope) (*azureMachinePoolService, error)
+
+// NewAzureMachinePoolReconciler returns a new AzureMachinePoolReconciler instance
+func NewAzureMachinePoolReconciler(client client.Client, log logr.Logger, recorder record.EventRecorder, reconcileTimeout time.Duration) *AzureMachinePoolReconciler {
+	ampr := &AzureMachinePoolReconciler{
+		Client:           client,
+		Log:              log,
+		Recorder:         recorder,
+		ReconcileTimeout: reconcileTimeout,
+	}
+
+	ampr.createAzureMachinePoolService = newAzureMachinePoolService
+
+	return ampr
+}
 
 // SetupWithManager initializes this controller with a manager.
 func (r *AzureMachinePoolReconciler) SetupWithManager(mgr ctrl.Manager, options controller.Options) error {
@@ -255,11 +272,12 @@ func (r *AzureMachinePoolReconciler) reconcileNormal(ctx context.Context, machin
 		return reconcile.Result{}, nil
 	}
 
-	ams := newAzureMachinePoolService(machinePoolScope, clusterScope)
-
-	err := ams.Reconcile(ctx)
+	ams, err := r.createAzureMachinePoolService(machinePoolScope)
 	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "failed creating a newAzureMachinePoolService")
+	}
 
+	if err := ams.Reconcile(ctx); err != nil {
 		// Handle transient and terminal errors
 		var reconcileError azure.ReconcileError
 		if errors.As(err, &reconcileError) {
@@ -324,7 +342,12 @@ func (r *AzureMachinePoolReconciler) reconcileDelete(ctx context.Context, machin
 	machinePoolScope.Info("Handling deleted AzureMachinePool")
 
 	if infracontroller.ShouldDeleteIndividualResources(ctx, clusterScope) {
-		if err := newAzureMachinePoolService(machinePoolScope, clusterScope).Delete(ctx); err != nil {
+		amps, err := r.createAzureMachinePoolService(machinePoolScope)
+		if err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "failed creating a new AzureMachinePoolService")
+		}
+
+		if err := amps.Delete(ctx); err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "error deleting AzureCluster %s/%s", clusterScope.Namespace(), clusterScope.ClusterName())
 		}
 	}

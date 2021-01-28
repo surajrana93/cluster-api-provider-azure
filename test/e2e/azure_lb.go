@@ -21,20 +21,22 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"net"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"io/ioutil"
 	k8snet "k8s.io/utils/net"
-	"net"
-	"regexp"
-	deploymentBuilder "sigs.k8s.io/cluster-api-provider-azure/test/e2e/kubernetes/deployment"
-	"sigs.k8s.io/cluster-api-provider-azure/test/e2e/kubernetes/job"
 
-	retryablehttp "github.com/hashicorp/go-retryablehttp"
+	"github.com/hashicorp/go-retryablehttp"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/cluster-api/test/framework"
+
+	deploymentBuilder "sigs.k8s.io/cluster-api-provider-azure/test/e2e/kubernetes/deployment"
+	"sigs.k8s.io/cluster-api-provider-azure/test/e2e/kubernetes/job"
+	"sigs.k8s.io/cluster-api-provider-azure/test/e2e/kubernetes/node"
+	"sigs.k8s.io/cluster-api-provider-azure/test/e2e/kubernetes/windows"
 )
 
 // AzureLBSpecInput is the input for AzureLBSpec.
@@ -44,6 +46,8 @@ type AzureLBSpecInput struct {
 	ClusterName           string
 	SkipCleanup           bool
 	IPv6                  bool
+	Windows               bool
+	IsVMSS                bool
 }
 
 // AzureLBSpec implements a test that verifies Azure internal and external load balancers can
@@ -65,9 +69,24 @@ func AzureLBSpec(ctx context.Context, inputGetter func() AzureLBSpecInput) {
 	clientset = clusterProxy.GetClientSet()
 	Expect(clientset).NotTo(BeNil())
 
-	By("creating an Apache HTTP deployment")
-	webDeployment := deploymentBuilder.CreateDeployment("httpd", "web", corev1.NamespaceDefault)
-	webDeployment.AddContainerPort("httpd", "http", 80, corev1.ProtocolTCP)
+	By("creating an HTTP deployment")
+	deploymentName := "web"
+	// if case of input.SkipCleanup we need a unique name for windows
+	if input.Windows {
+		deploymentName = "web-windows"
+	}
+
+	webDeployment := deploymentBuilder.CreateDeployment("httpd", deploymentName, corev1.NamespaceDefault)
+	webDeployment.AddContainerPort("http", "http", 80, corev1.ProtocolTCP)
+
+	if input.Windows {
+		windowsVersion, err := node.GetWindowsVersion(clientset)
+		Expect(err).NotTo(HaveOccurred())
+		iisImage := windows.GetWindowsImage(windows.Httpd, windowsVersion)
+		webDeployment.SetImage(deploymentName, iisImage)
+		webDeployment.AddWindowsSelectors()
+	}
+
 	deployment, err := webDeployment.Deploy(clientset)
 	Expect(err).NotTo(HaveOccurred())
 	deployInput := WaitForDeploymentsAvailableInput{
@@ -95,7 +114,9 @@ func AzureLBSpec(ctx context.Context, inputGetter func() AzureLBSpecInput) {
 
 	// TODO: fix and enable this. Internal LBs + IPv6 is currently in preview.
 	// https://docs.microsoft.com/en-us/azure/virtual-network/ipv6-dual-stack-standard-internal-load-balancer-powershell
-	if !input.IPv6 {
+	//
+	// TODO: fix and enable this for VMSS after NRP / CRP sync bug is resolved
+	if !input.IPv6 && !input.IsVMSS {
 		By("creating an internal Load Balancer service")
 
 		ilbService := webDeployment.GetService(ports, deploymentBuilder.InternalLoadbalancer)
@@ -159,6 +180,9 @@ func AzureLBSpec(ctx context.Context, inputGetter func() AzureLBSpecInput) {
 	}
 	WaitForJobComplete(context.TODO(), elbJobInput, e2eConfig.GetIntervals(specName, "wait-job")...)
 
+	// TODO: determine root issue of failures of addressing the ELB from prow and fix
+	// see https://kubernetes.slack.com/archives/CEX9HENG7/p1610547551019900
+
 	if !input.IPv6 {
 		By("connecting directly to the external LB service")
 		url := fmt.Sprintf("http://%s", elbIP)
@@ -167,11 +191,8 @@ func AzureLBSpec(ctx context.Context, inputGetter func() AzureLBSpecInput) {
 			defer resp.Body.Close()
 		}
 		Expect(err).NotTo(HaveOccurred())
-		body, err := ioutil.ReadAll(resp.Body)
+		Expect(resp.StatusCode).To(Equal(200))
 		Expect(err).NotTo(HaveOccurred())
-		matched, err := regexp.MatchString("It works!", string(body))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(matched).To(BeTrue())
 	}
 
 	if input.SkipCleanup {

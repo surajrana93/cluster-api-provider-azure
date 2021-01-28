@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/Azure/go-autorest/autorest"
+
 	infrav1 "sigs.k8s.io/cluster-api-provider-azure/api/v1alpha3"
 )
 
@@ -54,6 +55,7 @@ type Authorizer interface {
 	TenantID() string
 	BaseURI() string
 	Authorizer() autorest.Authorizer
+	HashKey() string
 }
 
 // NetworkDescriber is an interface which can get common Azure Cluster Networking information.
@@ -79,6 +81,7 @@ type ClusterDescriber interface {
 	ClusterName() string
 	Location() string
 	AdditionalTags() infrav1.Tags
+	AvailabilitySetEnabled() bool
 }
 
 // ClusterScoper combines the ClusterDescriber and NetworkDescriber interfaces.

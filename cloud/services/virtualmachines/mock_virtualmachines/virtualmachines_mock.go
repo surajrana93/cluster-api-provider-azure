@@ -246,6 +246,20 @@ func (mr *MockVMScopeMockRecorder) Authorizer() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authorizer", reflect.TypeOf((*MockVMScope)(nil).Authorizer))
 }
 
+// HashKey mocks base method.
+func (m *MockVMScope) HashKey() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HashKey")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// HashKey indicates an expected call of HashKey.
+func (mr *MockVMScopeMockRecorder) HashKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HashKey", reflect.TypeOf((*MockVMScope)(nil).HashKey))
+}
+
 // ResourceGroup mocks base method.
 func (m *MockVMScope) ResourceGroup() string {
 	m.ctrl.T.Helper()
@@ -300,6 +314,20 @@ func (m *MockVMScope) AdditionalTags() v1alpha3.Tags {
 func (mr *MockVMScopeMockRecorder) AdditionalTags() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdditionalTags", reflect.TypeOf((*MockVMScope)(nil).AdditionalTags))
+}
+
+// AvailabilitySetEnabled mocks base method.
+func (m *MockVMScope) AvailabilitySetEnabled() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AvailabilitySetEnabled")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// AvailabilitySetEnabled indicates an expected call of AvailabilitySetEnabled.
+func (mr *MockVMScopeMockRecorder) AvailabilitySetEnabled() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AvailabilitySetEnabled", reflect.TypeOf((*MockVMScope)(nil).AvailabilitySetEnabled))
 }
 
 // VMSpec mocks base method.
@@ -370,6 +398,21 @@ func (m *MockVMScope) ProviderID() string {
 func (mr *MockVMScopeMockRecorder) ProviderID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProviderID", reflect.TypeOf((*MockVMScope)(nil).ProviderID))
+}
+
+// AvailabilitySet mocks base method.
+func (m *MockVMScope) AvailabilitySet() (string, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AvailabilitySet")
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// AvailabilitySet indicates an expected call of AvailabilitySet.
+func (mr *MockVMScopeMockRecorder) AvailabilitySet() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AvailabilitySet", reflect.TypeOf((*MockVMScope)(nil).AvailabilitySet))
 }
 
 // SetProviderID mocks base method.

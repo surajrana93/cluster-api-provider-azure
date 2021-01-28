@@ -19,6 +19,8 @@ package controllers
 import (
 	"context"
 
+	"sigs.k8s.io/cluster-api-provider-azure/cloud/services/vmssextensions"
+
 	"github.com/pkg/errors"
 
 	azure "sigs.k8s.io/cluster-api-provider-azure/cloud"
@@ -34,16 +36,24 @@ type azureMachinePoolService struct {
 	virtualMachinesScaleSetSvc azure.Service
 	skuCache                   *resourceskus.Cache
 	roleAssignmentsSvc         azure.Service
+	vmssExtensionSvc           azure.Service
 }
 
+var _ azure.Service = (*azureMachinePoolService)(nil)
+
 // newAzureMachinePoolService populates all the services based on input scope.
-func newAzureMachinePoolService(machinePoolScope *scope.MachinePoolScope, clusterScope *scope.ClusterScope) *azureMachinePoolService {
-	cache := resourceskus.NewCache(clusterScope, clusterScope.Location())
+func newAzureMachinePoolService(machinePoolScope *scope.MachinePoolScope) (*azureMachinePoolService, error) {
+	cache, err := resourceskus.GetCache(machinePoolScope, machinePoolScope.Location())
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create a NewCache")
+	}
+
 	return &azureMachinePoolService{
 		virtualMachinesScaleSetSvc: scalesets.NewService(machinePoolScope, cache),
 		skuCache:                   cache,
 		roleAssignmentsSvc:         roleassignments.New(machinePoolScope),
-	}
+		vmssExtensionSvc:           vmssextensions.New(machinePoolScope),
+	}, nil
 }
 
 // Reconcile reconciles all the services in pre determined order.
@@ -57,6 +67,10 @@ func (s *azureMachinePoolService) Reconcile(ctx context.Context) error {
 
 	if err := s.roleAssignmentsSvc.Reconcile(ctx); err != nil {
 		return errors.Wrap(err, "unable to create role assignment")
+	}
+
+	if err := s.vmssExtensionSvc.Reconcile(ctx); err != nil {
+		return errors.Wrap(err, "unable to create vmss extension")
 	}
 
 	return nil

@@ -18,6 +18,7 @@ require (
 	github.com/google/gofuzz v1.2.0
 	github.com/google/uuid v1.1.2
 	github.com/hashicorp/go-retryablehttp v0.6.8
+	github.com/hashicorp/golang-lru v0.5.4
 	github.com/onsi/ginkgo v1.14.2
 	github.com/onsi/gomega v1.10.3
 	github.com/pkg/errors v0.9.1
@@ -36,7 +37,7 @@ require (
 	k8s.io/klog v1.0.0
 	k8s.io/kubectl v0.17.14
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920
-	sigs.k8s.io/cluster-api v0.3.12
+	sigs.k8s.io/cluster-api v0.3.13
 	sigs.k8s.io/controller-runtime v0.5.14
 	sigs.k8s.io/kind v0.7.1-0.20200303021537-981bd80d3802
 )

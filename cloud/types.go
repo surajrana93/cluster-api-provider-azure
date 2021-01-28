@@ -182,3 +182,24 @@ type PrivateDNSSpec struct {
 	LinkName          string
 	Records           []infrav1.AddressRecord
 }
+
+// AvailabilitySetSpec defines the specification for an availability set.
+type AvailabilitySetSpec struct {
+	Name string
+}
+
+// VMExtensionSpec defines the specification for a VM extension.
+type VMExtensionSpec struct {
+	Name      string
+	VMName    string
+	Publisher string
+	Version   string
+}
+
+// VMSSExtensionSpec defines the specification for a VMSS extension.
+type VMSSExtensionSpec struct {
+	Name         string
+	ScaleSetName string
+	Publisher    string
+	Version      string
+}

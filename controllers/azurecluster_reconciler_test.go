@@ -113,7 +113,7 @@ func TestAzureClusterReconcilerDelete(t *testing.T) {
 
 			tc.expect(groupsMock.EXPECT(), vnetMock.EXPECT(), sgMock.EXPECT(), rtMock.EXPECT(), subnetsMock.EXPECT(), publicIPMock.EXPECT(), lbMock.EXPECT(), dnsMock.EXPECT())
 
-			r := &azureClusterReconciler{
+			s := &azureClusterService{
 				scope: &scope.ClusterScope{
 					AzureCluster: &infrav1.AzureCluster{},
 				},
@@ -128,7 +128,7 @@ func TestAzureClusterReconcilerDelete(t *testing.T) {
 				skuCache:         resourceskus.NewStaticCache([]compute.ResourceSku{}),
 			}
 
-			err := r.Delete(context.TODO())
+			err := s.Delete(context.TODO())
 			if tc.expectedError != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err).To(MatchError(tc.expectedError))

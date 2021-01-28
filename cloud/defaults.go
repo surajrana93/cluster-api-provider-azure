@@ -19,8 +19,12 @@ package azure
 import (
 	"fmt"
 
+	"github.com/Azure/go-autorest/autorest/azure"
+
+	"github.com/Azure/go-autorest/autorest"
 	"github.com/blang/semver"
 	"github.com/pkg/errors"
+
 	infrav1 "sigs.k8s.io/cluster-api-provider-azure/api/v1alpha3"
 	"sigs.k8s.io/cluster-api-provider-azure/version"
 )
@@ -33,10 +37,17 @@ const (
 const (
 	// DefaultImageOfferID is the default Azure Marketplace offer ID
 	DefaultImageOfferID = "capi"
+	// DefaultWindowsImageOfferID is the default Azure Marketplace offer ID for Windows
+	DefaultWindowsImageOfferID = "capi-windows"
 	// DefaultImagePublisherID is the default Azure Marketplace publisher ID
 	DefaultImagePublisherID = "cncf-upstream"
 	// LatestVersion is the image version latest
 	LatestVersion = "latest"
+)
+
+const (
+	// WindowsOS is Windows OS value for OSDisk
+	WindowsOS = "Windows"
 )
 
 const (
@@ -47,6 +58,11 @@ const (
 const (
 	// PrivateAPIServerHostname will be used as the api server hostname for private clusters.
 	PrivateAPIServerHostname = "apiserver"
+)
+
+const (
+	// ControlPlaneNodeGroup will be used to create availability set for control plane machines
+	ControlPlaneNodeGroup = "control-plane"
 )
 
 // GenerateBackendAddressPoolName generates a load balancer backend address pool name.
@@ -119,6 +135,14 @@ func GenerateDataDiskName(machineName, nameSuffix string) string {
 	return fmt.Sprintf("%s_%s", machineName, nameSuffix)
 }
 
+// GenerateAvailabilitySetName generates the name of a availability set based on the cluster name and the node group.
+// node group identifies the set of nodes that belong to this availability set:
+// For control plane nodes, this will be `control-plane`.
+// For worker nodes, this will be the machine deployment name.
+func GenerateAvailabilitySetName(clusterName, nodeGroup string) string {
+	return fmt.Sprintf("%s_%s-as", clusterName, nodeGroup)
+}
+
 // VMID returns the azure resource ID for a given VM.
 func VMID(subscriptionID, resourceGroup, vmName string) string {
 	return fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/virtualMachines/%s", subscriptionID, resourceGroup, vmName)
@@ -174,18 +198,23 @@ func NATRuleID(subscriptionID, resourceGroup, loadBalancerName, natRuleName stri
 	return fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/loadBalancers/%s/inboundNatRules/%s", subscriptionID, resourceGroup, loadBalancerName, natRuleName)
 }
 
+// AvailabilitySetID returns the azure resource ID for a given availability set.
+func AvailabilitySetID(subscriptionID, resourceGroup, availabilitySetName string) string {
+	return fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/availabilitySets/%s", subscriptionID, resourceGroup, availabilitySetName)
+}
+
 // GetDefaultImageSKUID gets the SKU ID of the image to use for the provided version of Kubernetes.
-func getDefaultImageSKUID(k8sVersion string) (string, error) {
+func getDefaultImageSKUID(k8sVersion, os, osVersion string) (string, error) {
 	version, err := semver.ParseTolerant(k8sVersion)
 	if err != nil {
 		return "", errors.Wrapf(err, "unable to parse Kubernetes version \"%s\" in spec, expected valid SemVer string", k8sVersion)
 	}
-	return fmt.Sprintf("k8s-%ddot%ddot%d-ubuntu-1804", version.Major, version.Minor, version.Patch), nil
+	return fmt.Sprintf("k8s-%ddot%ddot%d-%s-%s", version.Major, version.Minor, version.Patch, os, osVersion), nil
 }
 
 // GetDefaultUbuntuImage returns the default image spec for Ubuntu.
 func GetDefaultUbuntuImage(k8sVersion string) (*infrav1.Image, error) {
-	skuID, err := getDefaultImageSKUID(k8sVersion)
+	skuID, err := getDefaultImageSKUID(k8sVersion, "ubuntu", "1804")
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get default image")
 	}
@@ -202,7 +231,49 @@ func GetDefaultUbuntuImage(k8sVersion string) (*infrav1.Image, error) {
 	return defaultImage, nil
 }
 
+// GetDefaultWindowsImage returns the default image spec for Windows.
+func GetDefaultWindowsImage(k8sVersion string) (*infrav1.Image, error) {
+	skuID, err := getDefaultImageSKUID(k8sVersion, "windows", "2019")
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get default image")
+	}
+
+	defaultImage := &infrav1.Image{
+		Marketplace: &infrav1.AzureMarketplaceImage{
+			Publisher: DefaultImagePublisherID,
+			Offer:     DefaultWindowsImageOfferID,
+			SKU:       skuID,
+			Version:   LatestVersion,
+		},
+	}
+
+	return defaultImage, nil
+}
+
+// GetBootstrappingVMExtension returns the CAPZ Bootstrapping VM extension.
+// The CAPZ Bootstrapping extension is a simple clone of https://github.com/Azure/custom-script-extension-linux which allows running arbitrary scripts on the VM.
+// Its role is to detect and report Kubernetes bootstrap failure or success.
+func GetBootstrappingVMExtension(osType string, cloud string) (name, publisher, version string) {
+	// currently, the bootstrap extension is only available for Linux and in AzurePublicCloud.
+	if osType == "Linux" && cloud == azure.PublicCloud.Name {
+		return "CAPZ.Linux.Bootstrapping", "Microsoft.Azure.ContainerUpstream", "1.0"
+	}
+
+	return "", "", ""
+}
+
 // UserAgent specifies a string to append to the agent identifier.
 func UserAgent() string {
 	return fmt.Sprintf("cluster-api-provider-azure/%s", version.Get().String())
+}
+
+// SetAutoRestClientDefaults set authorizer and user agent for autorest client
+func SetAutoRestClientDefaults(c *autorest.Client, auth autorest.Authorizer) {
+	c.Authorizer = auth
+	AutoRestClientAppendUserAgent(c, UserAgent())
+}
+
+// AutoRestClientAppendUserAgent autorest client calls "AddToUserAgent" but ignores errors
+func AutoRestClientAppendUserAgent(c *autorest.Client, extension string) {
+	_ = c.AddToUserAgent(extension) // intentionally ignore error as it doesn't matter
 }

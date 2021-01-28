@@ -317,6 +317,20 @@ func (mr *MockAuthorizerMockRecorder) Authorizer() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authorizer", reflect.TypeOf((*MockAuthorizer)(nil).Authorizer))
 }
 
+// HashKey mocks base method.
+func (m *MockAuthorizer) HashKey() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HashKey")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// HashKey indicates an expected call of HashKey.
+func (mr *MockAuthorizerMockRecorder) HashKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HashKey", reflect.TypeOf((*MockAuthorizer)(nil).HashKey))
+}
+
 // MockNetworkDescriber is a mock of NetworkDescriber interface.
 type MockNetworkDescriber struct {
 	ctrl     *gomock.Controller
@@ -629,6 +643,20 @@ func (mr *MockClusterDescriberMockRecorder) Authorizer() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authorizer", reflect.TypeOf((*MockClusterDescriber)(nil).Authorizer))
 }
 
+// HashKey mocks base method.
+func (m *MockClusterDescriber) HashKey() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HashKey")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// HashKey indicates an expected call of HashKey.
+func (mr *MockClusterDescriberMockRecorder) HashKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HashKey", reflect.TypeOf((*MockClusterDescriber)(nil).HashKey))
+}
+
 // ResourceGroup mocks base method.
 func (m *MockClusterDescriber) ResourceGroup() string {
 	m.ctrl.T.Helper()
@@ -683,6 +711,20 @@ func (m *MockClusterDescriber) AdditionalTags() v1alpha3.Tags {
 func (mr *MockClusterDescriberMockRecorder) AdditionalTags() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdditionalTags", reflect.TypeOf((*MockClusterDescriber)(nil).AdditionalTags))
+}
+
+// AvailabilitySetEnabled mocks base method.
+func (m *MockClusterDescriber) AvailabilitySetEnabled() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AvailabilitySetEnabled")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// AvailabilitySetEnabled indicates an expected call of AvailabilitySetEnabled.
+func (mr *MockClusterDescriberMockRecorder) AvailabilitySetEnabled() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AvailabilitySetEnabled", reflect.TypeOf((*MockClusterDescriber)(nil).AvailabilitySetEnabled))
 }
 
 // MockClusterScoper is a mock of ClusterScoper interface.
@@ -806,6 +848,20 @@ func (mr *MockClusterScoperMockRecorder) Authorizer() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authorizer", reflect.TypeOf((*MockClusterScoper)(nil).Authorizer))
 }
 
+// HashKey mocks base method.
+func (m *MockClusterScoper) HashKey() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HashKey")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// HashKey indicates an expected call of HashKey.
+func (mr *MockClusterScoperMockRecorder) HashKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HashKey", reflect.TypeOf((*MockClusterScoper)(nil).HashKey))
+}
+
 // ResourceGroup mocks base method.
 func (m *MockClusterScoper) ResourceGroup() string {
 	m.ctrl.T.Helper()
@@ -860,6 +916,20 @@ func (m *MockClusterScoper) AdditionalTags() v1alpha3.Tags {
 func (mr *MockClusterScoperMockRecorder) AdditionalTags() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdditionalTags", reflect.TypeOf((*MockClusterScoper)(nil).AdditionalTags))
+}
+
+// AvailabilitySetEnabled mocks base method.
+func (m *MockClusterScoper) AvailabilitySetEnabled() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AvailabilitySetEnabled")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// AvailabilitySetEnabled indicates an expected call of AvailabilitySetEnabled.
+func (mr *MockClusterScoperMockRecorder) AvailabilitySetEnabled() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AvailabilitySetEnabled", reflect.TypeOf((*MockClusterScoper)(nil).AvailabilitySetEnabled))
 }
 
 // Vnet mocks base method.

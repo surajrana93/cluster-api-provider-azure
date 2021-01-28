@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"strings"
 
 	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/go-logr/logr"
@@ -27,8 +28,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/klogr"
-	infrav1 "sigs.k8s.io/cluster-api-provider-azure/api/v1alpha3"
-	azure "sigs.k8s.io/cluster-api-provider-azure/cloud"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	"sigs.k8s.io/cluster-api/controllers/noderefutil"
 	capierrors "sigs.k8s.io/cluster-api/errors"
@@ -36,6 +35,9 @@ import (
 	"sigs.k8s.io/cluster-api/util/conditions"
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	infrav1 "sigs.k8s.io/cluster-api-provider-azure/api/v1alpha3"
+	azure "sigs.k8s.io/cluster-api-provider-azure/cloud"
 )
 
 // MachineScopeParams defines the input parameters used to create a new MachineScope.
@@ -120,7 +122,7 @@ func (m *MachineScope) TagsSpecs() []azure.TagsSpec {
 // PublicIPSpecs returns the public IP specs.
 func (m *MachineScope) PublicIPSpecs() []azure.PublicIPSpec {
 	var spec []azure.PublicIPSpec
-	if m.AzureMachine.Spec.AllocatePublicIP == true {
+	if m.AzureMachine.Spec.AllocatePublicIP {
 		spec = append(spec, azure.PublicIPSpec{
 			Name: azure.GenerateNodePublicIPName(m.Name()),
 		})
@@ -166,7 +168,7 @@ func (m *MachineScope) NICSpecs() []azure.NICSpec {
 		}
 	}
 	specs := []azure.NICSpec{spec}
-	if m.AzureMachine.Spec.AllocatePublicIP == true {
+	if m.AzureMachine.Spec.AllocatePublicIP {
 		specs = append(specs, azure.NICSpec{
 			Name:                  azure.GeneratePublicNICName(m.Name()),
 			MachineName:           m.Name(),
@@ -193,13 +195,13 @@ func (m *MachineScope) NICNames() []string {
 
 // DiskSpecs returns the disk specs.
 func (m *MachineScope) DiskSpecs() []azure.DiskSpec {
-	spec := azure.DiskSpec{
+	disks := make([]azure.DiskSpec, 1+len(m.AzureMachine.Spec.DataDisks))
+	disks[0] = azure.DiskSpec{
 		Name: azure.GenerateOSDiskName(m.Name()),
 	}
-	disks := []azure.DiskSpec{spec}
 
-	for _, dd := range m.AzureMachine.Spec.DataDisks {
-		disks = append(disks, azure.DiskSpec{Name: azure.GenerateDataDiskName(m.Name(), dd.NameSuffix)})
+	for i, dd := range m.AzureMachine.Spec.DataDisks {
+		disks[i+1] = azure.DiskSpec{Name: azure.GenerateDataDiskName(m.Name(), dd.NameSuffix)}
 	}
 	return disks
 }
@@ -227,6 +229,22 @@ func (m *MachineScope) RoleAssignmentSpecs() []azure.RoleAssignmentSpec {
 		}
 	}
 	return []azure.RoleAssignmentSpec{}
+}
+
+// VMExtensionSpecs returns the vm extension specs.
+func (m *MachineScope) VMExtensionSpecs() []azure.VMExtensionSpec {
+	name, publisher, version := azure.GetBootstrappingVMExtension(m.AzureMachine.Spec.OSDisk.OSType, m.CloudEnvironment())
+	if name != "" {
+		return []azure.VMExtensionSpec{
+			{
+				Name:      name,
+				VMName:    m.Name(),
+				Publisher: publisher,
+				Version:   version,
+			},
+		}
+	}
+	return []azure.VMExtensionSpec{}
 }
 
 // Subnet returns the machine's subnet based on its role
@@ -260,6 +278,15 @@ func (m *MachineScope) AvailabilityZone() string {
 
 // Name returns the AzureMachine name.
 func (m *MachineScope) Name() string {
+	// Windows Machine names cannot be longer than 15 chars
+	if m.AzureMachine.Spec.OSDisk.OSType == azure.WindowsOS && len(m.AzureMachine.Name) > 15 {
+		clustername := m.ClusterName()
+		if len(m.ClusterName()) > 9 {
+			clustername = strings.TrimSuffix(clustername[0:9], "-")
+		}
+
+		return clustername + "-" + m.AzureMachine.Name[len(m.AzureMachine.Name)-5:]
+	}
 	return m.AzureMachine.Name
 }
 
@@ -297,6 +324,24 @@ func (m *MachineScope) ProviderID() string {
 		return ""
 	}
 	return parsed.ID()
+}
+
+// AvailabilitySet returns the availability set for this machine if available
+func (m *MachineScope) AvailabilitySet() (string, bool) {
+	if !m.AvailabilitySetEnabled() {
+		return "", false
+	}
+
+	if m.IsControlPlane() {
+		return azure.GenerateAvailabilitySetName(m.ClusterName(), azure.ControlPlaneNodeGroup), true
+	}
+
+	// get machine deployment name from labels for machines that maybe part of a machine deployment.
+	if mdName, ok := m.Machine.Labels[clusterv1.MachineDeploymentLabelName]; ok {
+		return azure.GenerateAvailabilitySetName(m.ClusterName(), mdName), true
+	}
+
+	return "", false
 }
 
 // SetProviderID sets the AzureMachine providerID in spec.
@@ -440,6 +485,12 @@ func (m *MachineScope) GetVMImage() (*infrav1.Image, error) {
 	if m.AzureMachine.Spec.Image != nil {
 		return m.AzureMachine.Spec.Image, nil
 	}
-	m.Info("No image specified for machine, using default", "machine", m.AzureMachine.GetName())
+
+	if m.AzureMachine.Spec.OSDisk.OSType == azure.WindowsOS {
+		m.Info("No image specified for machine, using default Windows Image", "machine", m.AzureMachine.GetName())
+		return azure.GetDefaultWindowsImage(to.String(m.Machine.Spec.Version))
+	}
+
+	m.Info("No image specified for machine, using default Linux Image", "machine", m.AzureMachine.GetName())
 	return azure.GetDefaultUbuntuImage(to.String(m.Machine.Spec.Version))
 }

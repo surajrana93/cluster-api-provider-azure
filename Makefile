@@ -56,14 +56,14 @@ CONTROLLER_GEN_VER := v0.3.0
 CONTROLLER_GEN_BIN := controller-gen
 CONTROLLER_GEN := $(TOOLS_BIN_DIR)/$(CONTROLLER_GEN_BIN)-$(CONTROLLER_GEN_VER)
 
-CONVERSION_GEN_VER := v0.18.4
+CONVERSION_GEN_VER := v0.18.14
 CONVERSION_GEN_BIN := conversion-gen
 CONVERSION_GEN := $(TOOLS_BIN_DIR)/$(CONVERSION_GEN_BIN)-$(CONVERSION_GEN_VER)
 
 ENVSUBST_BIN := envsubst
 ENVSUBST := $(TOOLS_BIN_DIR)/$(ENVSUBST_BIN)-drone
 
-GOLANGCI_LINT_VER := v1.32.2
+GOLANGCI_LINT_VER := v1.34.0
 GOLANGCI_LINT_BIN := golangci-lint
 GOLANGCI_LINT := $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER)
 
@@ -84,11 +84,11 @@ GO_APIDIFF_VER := latest
 GO_APIDIFF_BIN := go-apidiff
 GO_APIDIFF := $(TOOLS_BIN_DIR)/$(GO_APIDIFF_BIN)
 
-GINKGO_VER := v1.13.0
+GINKGO_VER := v1.14.2
 GINKGO_BIN := ginkgo
 GINKGO := $(TOOLS_BIN_DIR)/$(GINKGO_BIN)-$(GINKGO_VER)
 
-KUBECTL_VER := v1.16.13
+KUBECTL_VER := v1.18.14
 KUBECTL_BIN := kubectl
 KUBECTL := $(TOOLS_BIN_DIR)/$(KUBECTL_BIN)-$(KUBECTL_VER)
 
@@ -440,7 +440,7 @@ create-management-cluster: $(KUSTOMIZE) $(ENVSUBST)
 	kubectl wait --for=condition=Available --timeout=5m -n cert-manager deployment/cert-manager-webhook
 
 	# Deploy CAPI
-	curl -sSL https://github.com/kubernetes-sigs/cluster-api/releases/download/v0.3.12/cluster-api-components.yaml | $(ENVSUBST) | kubectl apply -f -
+	curl -sSL https://github.com/kubernetes-sigs/cluster-api/releases/download/v0.3.13/cluster-api-components.yaml | $(ENVSUBST) | kubectl apply -f -
 
 	# Deploy CAPZ
 	kind load docker-image $(CONTROLLER_IMG)-$(ARCH):$(TAG) --name=capz
@@ -455,8 +455,10 @@ create-management-cluster: $(KUSTOMIZE) $(ENVSUBST)
 	# apply CNI ClusterResourceSets
 	kubectl create configmap calico-addon --from-file=templates/addons/calico.yaml
 	kubectl create configmap calico-ipv6-addon --from-file=templates/addons/calico-ipv6.yaml
+	kubectl create configmap flannel-windows-addon --from-file=templates/addons/windows/
 	kubectl apply -f templates/addons/calico-resource-set.yaml
-
+	kubectl apply -f templates/addons/flannel-resource-set.yaml
+	
 	# Wait for CAPZ deployments
 	kubectl wait --for=condition=Available --timeout=5m -n capz-system deployment -l cluster.x-k8s.io/provider=infrastructure-azure
 
@@ -478,6 +480,9 @@ create-workload-cluster: $(ENVSUBST)
 	@if [[ "${CLUSTER_TEMPLATE}" == *prow* ]]; then \
 		if [[ "${CLUSTER_TEMPLATE}" == *ipv6* ]]; then \
 			kubectl --kubeconfig=./kubeconfig apply -f templates/addons/calico-ipv6.yaml; \
+		elif [[ "${CLUSTER_TEMPLATE}" == *windows* ]]; then \
+			echo "windows being applied" \
+			kubectl --kubeconfig=./kubeconfig apply -f templates/addons/windows; \
 		else \
 			kubectl --kubeconfig=./kubeconfig apply -f templates/addons/calico.yaml; \
 		fi \
